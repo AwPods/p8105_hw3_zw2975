@@ -1,0 +1,39 @@
+---
+title: "p8105_hw3_zw2975"
+author: "Zhiyu Wei"
+date: 2024-10-14
+output: github_document
+---
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(dplyr)
+```
+
+
+## Problem 1
+
+```{r import dataset 1}
+# Import data
+library(p8105.datasets) 
+data("ny_noaa")
+```
+#### short descirption of the dataset:
+The `ny_noaa` dataset has variables `id`, `date`, `prcp`, `snow`,`snwd`, `tamx`, and `tmin`. 
+
+This dataset has `r nrow(ny_noaa)` rows and `r ncol(ny_noaa)` columns.
+
+
+
+#### Clean ny_noaa
+```{r clean data}
+
+
+```
+
+## Problem 2
+
+
+
+
+```
