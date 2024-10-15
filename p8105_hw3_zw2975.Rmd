@@ -9,6 +9,7 @@ output: github_document
 library(tidyverse)
 library(dplyr)
 library(ggplot2)
+library(patchwork)
 ```
 
 
@@ -27,10 +28,19 @@ This dataset has `r nrow(ny_noaa)` rows and `r ncol(ny_noaa)` columns.
 Missing date should not impact the analysis result drastically since there are already too many missing values for `tmin`, `tmax`, `snow`, and `snwd`.
 
 #### Clean ny_noaa
-```{r clean data}
+```{r clean data, warning = FALSE}
 # make dates cleaner
 ny_noaa <- ny_noaa %>%
 mutate(year = year(date), month = month(date), day = day(date))
+
+# character to numeric, integer to numeric
+ny_noaa <- ny_noaa %>%
+  mutate(tmin = as.numeric(tmin)) %>%
+  mutate(tmax= as.numeric (tmax)) %>%
+  mutate(snow = as.numeric(snow)) %>%
+  mutate(snwd = as.numeric(snwd)) %>%
+  mutate(prcp = as.numeric(prcp))
+
 
 # relocate the variables and rename them
 ny_noaa <- ny_noaa %>%
@@ -38,26 +48,30 @@ ny_noaa <- ny_noaa %>%
   rename(precip = prcp, snowfall = snow, snowdepth = snwd) %>%
   relocate(id)
 
+
 # commonly observed value for snowfall
 ggplot(ny_noaa, aes(x = snowfall)) + 
   geom_histogram() +
   labs (title = "snow fall distribution",
         x = "snow fall (mm)",
         y = "count in observation") 
+
+
 ```
 ##### According to the histogram of snowfall, the most commonly observed value for snowfall is 0 mm.
 
 #### panel plots
 ```{r panel plot}
+
 # in January
 ny_noaa|>
-     group_by(id) |>
+  filter(!is.na (tmax)) |> #no need to include na obs
   filter(month == 1) |>
-  summarize(mean_jan = mean(tmax, na.rm = TRUE))|>
-  ggplot(aes(x = id, y= mean_jan )) +
+  ggplot(aes(x = year, y= tmax )) +
   labs(title = "January max temperature",
        ylab = "Temperature (in tenths)",
-       xlab = "station id")
+       xlab = "year") +
+  facet_wrap(~id)
 ```
 
 #### panel plots 2
@@ -79,6 +93,7 @@ ggplot(ny_noaa2, aes(x = tmin)) +
   xlab("tmin") +
   ylab("Density")
 
+# density plot for both
 ggplot(ny_noaa2) +
   geom_density(aes(x = tmax, fill = "tmax"), alpha = 0.5) +
   geom_density(aes(x = tmin, fill = "tmin"), alpha = 0.5) +
@@ -112,7 +127,7 @@ demog <- demog |>
  mutate(sex = if_else(sex == 1, "male",
                       if_else( sex == 2, "female",
                       NA_character_)))|>
-          mutate(education = if_else(education == 1,"less han high school" ,
+          mutate(education = if_else(education == 1,"less than high school" ,
                                      if_else(education == 2, "high school equivalent",
                                      if_else(education == 3, "more than high school", NA_character_))))
                   
@@ -131,6 +146,11 @@ nhanes <- inner_join (demog, acceler, by = "seqn")
 nhanes <- nhanes |>
   filter(age >= 21)
 
+
+# age needs to be numeric
+nhanes <- nhanes |>
+  mutate(age = as.numeric(age))
+
 ```
 
 
@@ -146,10 +166,12 @@ table(nhanes$sex, nhanes$education)
 nhanes |>
   ggplot(aes(x = age)) +
   geom_bar(aes(color = sex),position = "dodge", alpha = .5) +
-   facet_wrap(~education) +
-   scale_x_discrete(
-    breaks =c(21,30,40,50,60,70,80)) 
+   facet_wrap(~education) 
+
 ```
+##### Comment
+From the table, we can see that the dataset have more participants who received education more than high school level. For male, there are more participants who received high school equivalent education compared to female. 
+The age distribution graph also reflects on the numbers from the table. The more than high school education category has the most observations and participants who age younger tend to fall into this education level. The age distribution for less than high school and high school equivalent education levels have very similar.
 
 
 #### total activity against age
@@ -163,13 +185,48 @@ mutate(total_activity = (rowSums(nhanes[, 6:ncol(nhanes)], na.rm = TRUE)))
 
 ggplot(nhanes, aes(x = age, y = total_activity)) +
 geom_point(aes(color = sex), alpha = .5)+
-  geom_smooth(method = smooth, se = FALSE) +
-  facet_wrap(~education) +
+  geom_smooth(method = "lm", se=FALSE, aes(color = sex)) +
+  facet_grid(.~education) +
   labs(
     title = "Total activity vs. age by gender and education level",
     x = "age",
     y = "total activity",
-    color = "sex")+
-  scale_x_discrete(
-    breaks =c(21, 40, 60, 80)) # I want more readable x axis numbers
+    color = "sex") # I want more readable x axis numbers
 ```
+
+##### Comment
+Same as what we observed in the previous graphs, this scatter plot also shows more participants falling into the more than high school education level. However, the total activity of participants across the 3 education level does not seem to have big difference. There is one very obvious outlier for more than high school education level, which is a male participant who almost have 0 total activity minutes. 
+
+When we look at the trend lines, both female and male tend to have a negative trend of age vs. total activity time and they have very similar slope. 
+
+#### 3 panel plot
+```{r 3 panel plot}
+# step 1: pivot longer 
+
+long =nhanes |>
+  pivot_longer (
+    "min1":"min1440",
+    names_to = "min",
+    values_to = "activity") |>
+  select(seqn, sex, min, activity,education )
+
+# step 2: mutate the min variable to make it numeric
+
+long <- long |>
+  mutate(min = as.numeric(gsub("min", "", min)))
+
+# step 3: plot the 3-panel plot
+
+long |>
+  ggplot(aes (x = min, y = activity, color = sex))+
+  geom_point(alpha = 0.05) + # increase the opacity of points to make the lines stand out
+  geom_smooth(se = FALSE, linewidth= 2) +
+  theme(legend.position = "bottom") +
+  labs(title = "24 hrs activity by education levels",
+       x = "minute (over 24 hrs)") +
+  facet_grid(.~education)
+```
+##### comment
+For every education level, the line all appears to be declining and increasing then declining to reflect a person's activity level during the 24 hrs period. During the middle of the day, which is around 500 minutes, the smooth trend line roughly reaches its maximum since it is around 10 am in the morning. When the line reaches somewhere over 1000 minutes, it starts declining, reflecting the end of work hours. 
+
+
