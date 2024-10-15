@@ -108,6 +108,14 @@ demog <- demog[5:254,]
 demog<-janitor::clean_names(demog)
 acceler <- janitor::clean_names(acceler)
 
+demog <- demog |>
+ mutate(sex = if_else(sex == 1, "male",
+                      if_else( sex == 2, "female",
+                      NA_character_)))|>
+          mutate(education = if_else(education == 1,"less han high school" ,
+                                     if_else(education == 2, "high school equivalent",
+                                     if_else(education == 3, "more than high school", NA_character_))))
+                  
 # get rid of missing demographic data
 demog <- demog |>
   na.omit()
@@ -126,8 +134,42 @@ nhanes <- nhanes |>
 ```
 
 
-#### reader friendly table
+#### table for number of men and women
 ```{r table}
-
+# sex as rows, education level as columns
+table(nhanes$sex, nhanes$education)
 ```
 
+
+#### visualization of age distibution
+```{r histogram}
+nhanes |>
+  ggplot(aes(x = age)) +
+  geom_bar(aes(color = sex),position = "dodge", alpha = .5) +
+   facet_wrap(~education) +
+   scale_x_discrete(
+    breaks =c(21,30,40,50,60,70,80)) 
+```
+
+
+#### total activity against age
+```{r new variable}
+# new variable: total activity
+nhanes <- nhanes |>
+mutate(total_activity = (rowSums(nhanes[, 6:ncol(nhanes)], na.rm = TRUE)))
+```
+
+```{r scatterplot}
+
+ggplot(nhanes, aes(x = age, y = total_activity)) +
+geom_point(aes(color = sex), alpha = .5)+
+  geom_smooth(method = smooth, se = FALSE) +
+  facet_wrap(~education) +
+  labs(
+    title = "Total activity vs. age by gender and education level",
+    x = "age",
+    y = "total activity",
+    color = "sex")+
+  scale_x_discrete(
+    breaks =c(21, 40, 60, 80)) # I want more readable x axis numbers
+```
