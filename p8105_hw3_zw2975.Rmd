@@ -31,83 +31,125 @@ Missing date should not impact the analysis result drastically since there are a
 #### Clean ny_noaa
 ```{r clean data, warning = FALSE}
 # make dates cleaner
-ny_noaa <- ny_noaa %>%
+ny_noaa <- ny_noaa |>
 mutate(year = year(date), month = month(date), day = day(date))
 
 # character to numeric, integer to numeric
-ny_noaa <- ny_noaa %>%
-  mutate(tmin = as.numeric(tmin)) %>%
-  mutate(tmax= as.numeric (tmax)) %>%
-  mutate(snow = as.numeric(snow)) %>%
-  mutate(snwd = as.numeric(snwd)) %>%
-  mutate(prcp = as.numeric(prcp))
+ny_noaa <- ny_noaa |>
+  mutate(tmin = as.numeric(tmin)) |>
+  mutate(tmax= as.numeric (tmax)) |>
+  mutate(snow = as.numeric(snow)) |>
+  mutate(snwd = as.numeric(snwd)) |>
+  mutate(prcp = as.numeric(prcp)) 
 
+# change units to proper ones
+ny_noaa <- ny_noaa |>
+  mutate(prcp = prcp/10) |>
+  mutate(tmax = tmax/10) |>
+  mutate(tmin = tmin/10)
 
-# relocate the variables and rename them
-ny_noaa <- ny_noaa %>%
-  relocate(year, month, day) %>%
-  rename(precip = prcp, snowfall = snow, snowdepth = snwd) %>%
-  relocate(id)
-
+# relocate the variables
+ny_noaa <- ny_noaa |>
+  relocate(year, month, day) 
 
 # commonly observed value for snowfall
-ggplot(ny_noaa, aes(x = snowfall)) + 
+ggplot(ny_noaa, aes(x = snow)) + 
   geom_histogram() +
   labs (title = "snow fall distribution",
         x = "snow fall (mm)",
         y = "count in observation") 
 
-
 ```
-##### According to the histogram of snowfall, the most commonly observed value for snowfall is 0 mm.
+
+##### Most commonly observed snow fall in mm and why
+According to the histogram of snowfall, the most commonly observed value for snowfall is 0 mm.
+
+In New York, most of the months across the year doesn't have snow. 
 
 #### panel plots
 ```{r panel plot}
+#step 1: store mean tmax in new datasets
 
-# in January
-ny_noaa|>
+# for January data
+jan = ny_noaa|>
+  filter(month == 1)|>
   filter(!is.na (tmax)) |> #no need to include na obs
-  filter(month == 1) |>
-  ggplot(aes(x = year, y= tmax )) +
-  labs(title = "January max temperature",
-       ylab = "Temperature (in tenths)",
-       xlab = "year") +
-  facet_wrap(~id)
+  group_by(id, year) |>
+  summarize(avg_tmax = mean(tmax))
+
+# for July data
+july = ny_noaa|>
+  filter(month == 7)|>
+  filter(!is.na (tmax)) |> #no need to include na obs
+  group_by(id, year) |>
+  summarize(avg_tmax = mean(tmax))
+
+# Step 2: make plots
+# January plot
+jan =
+  ggplot(jan, aes(x = year, y= avg_tmax, color = id)) +
+  geom_point(alpha = 0.3)+
+  labs(title = "January average max temperature",
+       y = "Temperature (degree celsius)") +
+  theme(legend.position="none") # there are too many stations, the legend takes all the space if not hidden
+  
+# July plot
+july =
+  ggplot(july, aes(x = year, y= avg_tmax, color = id)) +
+  geom_point(alpha = 0.3)+
+  labs(title = "July average max temperature",
+       y = "Temperature (degree celsius)") +
+  theme(legend.position="none")
+
+# display 2-panel plot
+jan + july
 ```
 
-#### panel plots 2
-```{r panel plots 2}
-# takes a long time the process the data, need to get rid of NAs
+##### Is there any observable / interpretable structure? Any outliers?
+For the January maximum temperature, there is an obvious trend of temperature climbing up then declining a little bit. As for July, the maximum temperature stays pretty much at the same level. 
+
+There are couple of outliers for January and July. The January outlier is around year of 1982 with a very low average maximum temperature value. 
+
+July 1988 has another obvious outlier also having a very low average maximum temperature value.
+
+#### panel plot 2
+```{r panel plot 2}
+# get rid of NAs
 ny_noaa2 <- ny_noaa |>
   filter(!is.na(tmax), !is.na(tmin))
 
-ggplot(ny_noaa2, aes(x = tmax)) +
-  geom_density(fill = "blue", alpha = 0.5) +
-  ggtitle("Density Plot for max temperature") +
-  xlab("tmax") +
-  ylab("Density")
-
-# Density plot for tmin
-ggplot(ny_noaa2, aes(x = tmin)) +
-  geom_density(fill = "red", alpha = 0.5) +
-  ggtitle("Density Plot for minimum temperature") +
-  xlab("tmin") +
-  ylab("Density")
-
-# density plot for both
-ggplot(ny_noaa2) +
+# density plot for tmin vs. tmax
+density = 
+  ggplot(ny_noaa2) +
   geom_density(aes(x = tmax, fill = "tmax"), alpha = 0.5) +
   geom_density(aes(x = tmin, fill = "tmin"), alpha = 0.5) +
   scale_fill_manual(values = c("tmax" = "blue", "tmin" = "red")) +
-  ggtitle("Combined Density Plot for tmax and tmin") +
-  xlab("Temperature") +
+  ggtitle("Combined Density Plot for tmin vs. tmax") +
+  xlab("Temperature (degree celsius)") +
   ylab("Density")
 
+# distribution of snowfall values
+
+# Filter on the snow fall data and make distribution plot
+snow = 
+  ny_noaa |>
+  filter(snow > 0 & snow < 100) |>
+  group_by(year) |>
+  summarise(avg_snow = mean(snow))|>
+  ggplot(aes(x = year, y = avg_snow))+
+geom_bar( stat = "identity",position =  "dodge") +
+  labs(x = "snow fall in mm",
+       title = "snow fall distribution by year",
+       y = "average snow fall during the year")
+
+#Patch together
+density + snow
 ```
 
 
 ## Problem 2
 ```{r p2 datasets}
+# Import datasets
 acceler = read.csv("./data/nhanes_accel.csv")
 demog = read.csv("./data/nhanes_covar.csv")
 ```
@@ -157,8 +199,10 @@ nhanes <- nhanes |>
 
 #### table for number of men and women
 ```{r table}
-# sex as rows, education level as columns
-table(nhanes$sex, nhanes$education)
+nhanes |>
+  group_by(education,sex) |>
+  summarise(number_of_participants = n()) |>
+  knitr::kable()
 ```
 
 
@@ -168,11 +212,13 @@ nhanes |>
   ggplot(aes(x = age)) +
   geom_bar(aes(color = sex),position = "dodge", alpha = .5) +
    facet_wrap(~education) 
-
 ```
+
+
 ##### Comment
+
 From the table, we can see that the dataset have more participants who received education more than high school level. For male, there are more participants who received high school equivalent education compared to female. 
-The age distribution graph also reflects on the numbers from the table. The more than high school education category has the most observations and participants who age younger tend to fall into this education level. The age distribution for less than high school and high school equivalent education levels have very similar.
+The age distribution graph also reflects on the numbers from the table. The more than high school education category has the most observations and participants who age younger tend to fall into this education level. The age distribution for less than high school and high school equivalent education levels are very similar.
 
 
 #### total activity against age
@@ -196,7 +242,7 @@ geom_point(aes(color = sex), alpha = .5)+
 ```
 
 ##### Comment
-Same as what we observed in the previous graphs, this scatter plot also shows more participants falling into the more than high school education level. However, the total activity of participants across the 3 education level does not seem to have big difference. There is one very obvious outlier for more than high school education level, which is a male participant who almost have 0 total activity minutes. 
+Same as what we observed in the previous graphs, this scatter plot also shows more participants falling into the more than high school education level. However, the total activity of participants across the 3 education level does not seem to have big difference. There is one very obvious outlier for more than high school education level, which is a male participant who almost has 0 total activity minutes. 
 
 When we look at the trend lines, both female and male tend to have a negative trend of age vs. total activity time and they have very similar slope. 
 
@@ -227,12 +273,15 @@ long |>
        x = "minute (over 24 hrs)") +
   facet_grid(.~education)
 ```
+
 ##### comment
-For every education level, the line all appears to be declining and increasing then declining to reflect a person's activity level during the 24 hrs period. During the middle of the day, which is around 500 minutes, the smooth trend line roughly reaches its maximum since it is around 10 am in the morning. When the line reaches somewhere over 1000 minutes, it starts declining, reflecting the end of work hours. 
+
+For the 3 education levels, the line all appears to be declining and increasing then declining to reflect a person's activity level during the 24 hours period. During the middle of the day, which is around 500 minutes, the smooth trend line roughly reaches its maximum since it is around 10 am in the morning. When the line reaches somewhere over 1000 minutes, it starts declining, reflecting the end of work hours. 
 
 
 ## Problem 3
 ```{r load datasets}
+# Import datasets
 jan2020 = read.csv("./data/citibike/Jan 2020 Citi.csv")
 
 jan2024 = read.csv("./data/citibike/Jan 2024 Citi.csv")
@@ -246,7 +295,7 @@ july2024 = read.csv("./data/citibike/July 2024 Citi.csv")
 The 4 Citibike datasets contain number of observations reflecting on the number of rides for each combination of year and month. 
 
 
-All of them have the exact same number of variables, which is `ncol(jan2020)`, with the same names:  `ride_id`, `rideable_type`, `weekdays`, `duration`, `start_station_name`, `end_station_name`, and `member_casual`. 
+All of them have the exact same number of variables, which is `r ncol(jan2020)`, with the same names:  `ride_id`, `rideable_type`, `weekdays`, `duration`, `start_station_name`, `end_station_name`, and `member_casual`. 
 
 In order to easily distinguish between the month and year for the datasets after appending them, I will create 2 variables, year and month, for each dataset before the merge. 
 
@@ -277,12 +326,12 @@ citibike = rbind(jan2020, july2020, jan2024, july2024)
 ##### data description
 Right now, all the datasets are combined together with 2 newly added variables `year` and `month` to help distinguish when the observation was from. 
 
-The combined dataset `citibike` has `ncol(citibike)` columns and `nrow(citibike)` rows. 
+The combined dataset `citibike` has `r ncol(citibike)` columns and `r nrow(citibike)` rows. 
 
 #### table and most popular stations
 ```{r total number of rides}
 
-# make table, moth as row, year as column, separate members
+# make table, month as row, year as column, separate members
 
 # first method
 table(citibike$month, citibike$year, citibike$member_casual)
@@ -291,14 +340,17 @@ table(citibike$month, citibike$year, citibike$member_casual)
 citibike |>
   group_by(year, month,member_casual) |>
   summarize(number_of_rides = n())|>
-  knitr::kable()
+  knitr::kable(col.names = c("year", "month", "member", "number of rides"))
 
-# 5 most popular starting stations for July 2024
+
+# top 5 popular start stations
+
 july2024 |>
   group_by(start_station_name) |>
-  summarize(number_of_rides = n()) |>
-  arrange(desc(number_of_rides))|>
-  head(n = 5)
+  summarise(number_of_rides = n()) |>
+  arrange(desc(number_of_rides)) |>
+  head(n = 5) |>
+  knitr::kable(col.names = c("Station Name", "Number of Rides"))
 
 ```
 
@@ -324,9 +376,10 @@ median_duration <- median_duration |>
   geom_bar(stat = "identity", position = "dodge" )+
   facet_wrap (~ month) +
   theme(legend.position = "bottom")+
-  labs(title = "comparison of ride median duration by weekday, month, and year",
+  labs(title = "Comparison of ride median duration by weekday, month, and year",
       x = "weekdays",
-      y = "ride median duration in minutes")
+      y = "ride median duration in minutes")+
+     theme(plot.title = element_text(size = 13))
 ```
 
 #### Impact of month, membership status, and bike type
